@@ -11,22 +11,25 @@
 int md9781_download_file( usb_dev_handle* dh,
                           const char* filename,
                           int nr,
-                          char
-                          location ) {
+                          char location,
+                          md9781_entry* playlist ) {
     unsigned char send_buffer[256];
     int retval;
     FILE* file = fopen( filename, "w");
-    struct file_descriptor ** files;
     long filesize;
     int chunks;
     int i;
-    
+
     if( location != 'M' && location != 'S' )
-     return 0;
- 
+        return 0;
+
     /* get list of files */
-    files = md9781_file_list(dh, location);
-    filesize = files[nr]->size;
+    playlist = md9781_file_list(dh, location);
+
+    for( i = 0; i < nr; i++ ) {
+        playlist = playlist->next;
+    }
+    filesize = playlist->size - 16;
     chunks = filesize / 512 + 1;
 
     #ifdef DEBUG
@@ -56,7 +59,7 @@ int md9781_download_file( usb_dev_handle* dh,
     #endif
 
     dummy_write(dh);
-dummy_read(dh);
+    dummy_read(dh);
 
     /** needs some work - you must know the filesize and hence the number of
     packages you can read */

@@ -6,13 +6,14 @@
 #define MD9781_INTERN   'M'
 #define MD9781_EXTERN   'S'
 
-
-#define INFO_FILE_ENTRY_LENGTH   sizeof( struct info_file_entry)
+#define MD9781_NO_FILE_ON_PLAYER	(md9781_entry*)1
 
 extern struct usb_device *md9781_dev;
 
-struct file_descriptor {
-    unsigned char name[13];
+typedef struct _md9781_entry {
+    unsigned char short_name[9];
+    unsigned char extension[4];
+    unsigned char* long_name;
     long size;
     int day;
     int month;
@@ -20,25 +21,52 @@ struct file_descriptor {
     int hour;
     int minute;
     int second;
-};
+    struct _md9781_entry* next;
+    struct _md9781_entry* prev;
+} md9781_entry;
 
-struct info_file_entry {
-   char*   name;
-   long    size;
-};
 
 usb_dev_handle*  md9781_open();
 int md9781_close( usb_dev_handle* dh );
-struct file_descriptor ** md9781_file_list( usb_dev_handle* dh, char location );
-struct info_file_entry**  md9781_play_list( usb_dev_handle* dh, char location );
-int md9781_delete_file( usb_dev_handle* dh, int file_number, char location  );
-int md9781_download_file( usb_dev_handle* dh, const char* filename, int nr, char location  );
+
+md9781_entry* md9781_file_list( usb_dev_handle* dh, 
+                                 char location );
+
+int md9781_delete_file( usb_dev_handle* dh, 
+                        int file_number, 
+			char location,
+			md9781_entry* playlist );
+
+int md9781_download_file( usb_dev_handle* dh, 
+                          const char* filename, 
+			  int nr, 
+			  char location,
+			  md9781_entry* playlist  );
+
 int md9781_upload_file( usb_dev_handle* dh, 
                         const char* filename,  
-			char location  );
-int md9781_rebuild_infofile( usb_dev_handle* dh, char location  );
-int md9781_upload_playlist( usb_dev_handle* dh, 
-                            char location,
-  			    struct info_file_entry** playlist ); 
+			char location,
+			md9781_entry* playlist );
+
+int md9781_number_of_files( md9781_entry* playlist );
+
+md9781_entry*  md9781_entry_number( md9781_entry* playlist, int nr );
+
+/* If something really went wrong with the player's playlist this
+ * procedure will regenerate it. 
+ * You will loose all long filenames in the playlist!
+ */
+int md9781_regenerate_playlist( usb_dev_handle* dh, char location  );
+
+/*
+ * If by some 'accident' the info file got lost you can create a new one
+ * with the help of this procedure
+ */
+int md9781_init_playlist( usb_dev_handle* dh, char location  );
+
+/* After a call of this procedure the player's playlist will not be used
+ * (read and write)
+ */ 
+void ignore_info_file();
 
 #endif

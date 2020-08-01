@@ -10,7 +10,7 @@
 
 
 int md9781_upload_file_from_buffer( usb_dev_handle* dh,char location,
-  char* filename, unsigned char* file_buffer, int length ) {
+                                    char* filename, unsigned char* file_buffer, int length ) {
     unsigned char send_buffer[256];
     int filetime, filedate;
     time_t t;
@@ -60,14 +60,16 @@ int md9781_upload_file_from_buffer( usb_dev_handle* dh,char location,
     sent = 0;
     while( sent < length ) {
         md9781_bulk_write(dh, file_buffer + sent, 512);
-	sent = sent + 512;
+        sent = sent + 512;
     }
-return 1;
+
+    return 1;
 }
 
 int md9781_upload_file( usb_dev_handle* dh,
                         const char* filename,
-                        char location ) {
+                        char location,
+                        md9781_entry* playlist ) {
     unsigned char send_buffer[256];
     long filesize;
     int filetime, filedate, read, chunks, i;
@@ -77,20 +79,44 @@ int md9781_upload_file( usb_dev_handle* dh,
     struct tm*  tm;
     char* long_target = strdup( filename );
     char* short_target;
-struct info_file_entry** playlist;
+    md9781_entry* playlist_start;
+    md9781_entry* entry = (md9781_entry*)malloc(sizeof(md9781_entry));
+    unsigned char* extension_temp;
+
+    #ifdef DEBUG
+    printf("md9781_upload_file\n");
+    #endif
 
     if( location != 'M' && location != 'S' )
         return 0;
-	
+
+    if( playlist == NULL )
+        playlist = md9781_file_list(dh, location);
+
     if( rindex( long_target, '/' ) != NULL )
-                 long_target = rindex(long_target, '/')+1;	
-	
+        long_target = rindex(long_target, '/')+1;
+
+
+    short_target = strdup(long_target);
+
+    extension_temp = rindex( short_target, '.' );
+    if( extension_temp != NULL ) {
+        entry->extension[0] = extension_temp[1];
+        entry->extension[1] = extension_temp[2];
+        entry->extension[2] = extension_temp[3];
+        entry->extension[3] = 0;
+        extension_temp[0] = 0;
+    } else {
+        entry->extension[0] = entry->extension[1] = entry->extension[2] = entry->extension[3] =0;
+    }
+
     if( strlen(long_target) > 8 ) {
-             short_target = strdup(long_target);
-             if( rindex( short_target, '.' ) != NULL )
-                 rindex(short_target, '.')[0] = 0;
-             short_target[8] = 0;
-         }
+        /* */
+    }
+
+    entry->long_name = strdup( long_target );
+    memcpy( entry->short_name, short_target, 8 );
+    entry->short_name[8] = 0;
 
     /* get some information about the file */
     stat( filename, filestat );
@@ -102,6 +128,9 @@ struct info_file_entry** playlist;
 
     filedate = (tm->tm_year-80)<<9 | (tm->tm_mon+1)<<5 | tm->tm_mday;
     filetime = tm->tm_hour << 11 | tm->tm_min << 5 | (tm->tm_sec/2);
+
+    entry->long_name = long_target;
+    entry->size = filesize - 16;
 
     /* prepare the send_buffer */
     memset(send_buffer, 0, 256);
@@ -157,22 +186,16 @@ struct info_file_entry** playlist;
 
     fclose(file);
 
-printf("reading playlist\n");
-playlist = md9781_play_list( dh, location);
-i = 0;
-while ( playlist[i] != NULL ) {
-printf("%s\n", playlist[i]->name);
- i++ ;
-}
-printf("files on player: %d\n", i );
-playlist[i] = (struct info_file_entry*)malloc( sizeof( struct info_file_entry) );
+    if( use_info_file ) {
+        playlist_start = playlist;
+        while( playlist->next != NULL )
+            playlist = playlist->next;
 
-playlist[i]->name = long_target;
-playlist[i]->size = filesize - 16;
+        playlist->next = entry;
 
-printf("entry added\n");
-md9781_upload_playlist( dh, location, playlist );
-printf("playlist written\n");
+        md9781_upload_playlist(dh,location, playlist_start);
+    }
+
     return 1;
 }
 

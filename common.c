@@ -2,6 +2,8 @@
 #include <malloc.h>
 #include "common.h"
 
+int use_info_file = 1;
+
 void error_message(unsigned char *hdr, unsigned char *txt) {
     fprintf(stderr, "\nERROR: %-15.15s %s\n", hdr, txt);
 }
@@ -66,7 +68,7 @@ int md9781_close( usb_dev_handle* md9781_handle ) {
 
     if (md9781_handle == NULL) {
         error_message("md9781_close", "need to initialize first");
-        return -1;
+        return MD9781_ERROR;
     }
 
     usb_close(md9781_handle);
@@ -81,7 +83,7 @@ int dummy_read( usb_dev_handle* dh ) {
     retval = usb_bulk_read(dh, 3, buffer, USB_BLOCK_SIZE, USB_SHORT_TIMEOUT);
     if (retval < 0) {
         error_message("dummy_read", "md9781_read failed");
-        exit( EXIT_FAILURE );
+return MD9781_ERROR;
     }
     dump_buffer( buffer, 256 );
 
@@ -98,7 +100,7 @@ int dummy_write( usb_dev_handle* dh ) {
 
     if (retval < 0) {
         error_message("dummy_write", "md9781_write failed");
-        exit( EXIT_FAILURE );
+        return MD9781_ERROR;
     }
     dump_buffer( buffer, 256 );
 
@@ -166,9 +168,9 @@ int md9781_bulk_write( usb_dev_handle* dh, char* buffer, int size ) {
     retval = usb_bulk_write(dh, 2, buffer, size, USB_SHORT_TIMEOUT);
     if (retval < 0) {
         error_message("md9781_bulk_write", "md9781_send failed");
-        exit( EXIT_FAILURE );
+        return MD9781_ERROR;
     }
-    return retval;
+    return MD9781_SUCCESS;
 }
 
 int md9781_bulk_read( usb_dev_handle* dh, char* buffer, int size ) {
@@ -176,8 +178,12 @@ int md9781_bulk_read( usb_dev_handle* dh, char* buffer, int size ) {
     retval = usb_bulk_read(dh, 3, buffer, size, USB_SHORT_TIMEOUT);
     if (retval < 0) {
         error_message("md9781_bulk_read", "md9781_read failed");
-        exit( EXIT_FAILURE );
+        return MD9781_ERROR;
     }
     dump_buffer(buffer, size);
-    return retval;
+    return MD9781_SUCCESS;
+}
+
+void ignore_info_file() {
+   use_info_file = 0;
 }

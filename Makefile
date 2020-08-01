@@ -2,12 +2,12 @@ CC          = /usr/bin/gcc
 RM          = /bin/rm -f
 CP          = /bin/cp -f
 
-CPPFLAGS    = -DDEBUG
+CPPFLAGS    = -DDEBUG -g
 CPPFLAGS    = -g
 CFLAGS      = -Wall
 INCLUDES    = 
 LDFLAGS     =  -lusb 
-#LDFLAGS     = /usr/src/packages/BUILD/libusb-0.1.5/.libs/libusb.a
+#LDFLAGS     = /home/jesper/libusb-0.1.7/.libs/libusb.a
 LIBRARIES   = 
 
 TARGETS =   md9781-manager 

@@ -1,44 +1,34 @@
 #include "common.h"
 #include "libmd9781.h"
 #include <stdio.h>
-#include <string.h> 
+#include <string.h>
+#include <malloc.h>
 
-struct info_file_entry** md9781_play_list( usb_dev_handle* dh, char location ) {
+md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location,
+        const md9781_entry* playlist_file ) {
     unsigned char buffer[256];
-    struct info_file_entry** playlist;
-    struct file_descriptor ** files;
+    md9781_playlist_entry* playlist = NULL;
+    md9781_playlist_entry* entry = NULL;
     long filesize;
-    int chunks,i, retval, file_nr, number_of_files ;
-    char*  info_file;
+    int chunks,i ;
+    unsigned char*  info_file;
+    char* orig_info_file;
+
+    #ifdef DEBUG
+    printf("Reading playlist.\n");
+    #endif
 
     if( location != 'M' && location != 'S' )
-     return 0;
+        return NULL;
 
-    /* get list of files */
-    files = md9781_file_list(dh, location);
-    
-    number_of_files = 0;
-    while( files[number_of_files] != NULL )  number_of_files++;
-    playlist = malloc((number_of_files+1)*sizeof(void*));
-    memset( playlist, 0, (number_of_files+1)*sizeof(void*) );
-    
-       #ifdef DEBUG
-    printf("%d files\n", number_of_files );
-#endif
-    filesize = files[MD9781_INFO_FILE]->size;
-    
-    md9781_freemem_filelist( files );
-    
+    filesize = playlist_file->size;
     chunks = filesize / 512 + 1;
-    info_file = (char*)malloc( filesize +1 );
-
-       #ifdef DEBUG
-    printf("Exspecting a %ld byte (%d packets) long file.\n", filesize, chunks);
-#endif
+    info_file = (char*)malloc( ((filesize+1)/512 +1 ) * 512 );
+    orig_info_file = info_file;
 
     /* prepare the send_buffer */
     memset(buffer, 0, 256);
-    
+
     /* the command */
     buffer[0] = '#';
     buffer[1] = 0x00;
@@ -49,7 +39,7 @@ struct info_file_entry** md9781_play_list( usb_dev_handle* dh, char location ) {
     buffer[6] = MD9781_INFO_FILE;
     buffer[7] = 0x2e;
 
-    md9781_bulk_write(dh, buffer, 256);
+    if( md9781_bulk_write(dh, buffer, 256) ) return NULL;
     dummy_write(dh);
     dummy_read(dh);
 
@@ -59,94 +49,137 @@ struct info_file_entry** md9781_play_list( usb_dev_handle* dh, char location ) {
     dummy_read(dh);
     dummy_read(dh);
     dummy_read(dh);
-    
+
     /* read the file */
     for(  i = 0; i < chunks; i++ ) {
         int length = 512;
-        retval = md9781_bulk_read(dh, info_file + i *512 , 512);
+        if( md9781_bulk_read(dh, info_file + i *512 , 512) ) return NULL;
         if( (i+1) * 512 > filesize )
             length = filesize % 512;
     }
-    
-    info_file[filesize+1] = 0;
 
-       #ifdef DEBUG
-    printf("%s\n", info_file);
-       #endif
+    info_file[filesize] = 0;
 
-    file_nr = 0;
+    #ifdef DEBUG
+    printf("INFO-FILE:\n%s\n", info_file);
+    #endif
+
     while( index(info_file, 0xd ) != NULL ) {
-       int name_length;
-       char* size_string;
-       
-       playlist[file_nr] = (struct info_file_entry*)malloc( INFO_FILE_ENTRY_LENGTH );
-       name_length = index(info_file, 0xd ) - info_file;
-       info_file[name_length+1] = 0;
-       playlist[file_nr]->name = strdup(info_file);
-       size_string =  index( playlist[file_nr]->name, '#' ) +1 ;
-       size_string[-1] = 0;
-       playlist[file_nr]->size = atoi( size_string );
-       
-       #ifdef DEBUG
-       printf("%s  - %ld\n", playlist[file_nr]->name, playlist[file_nr]->size);
-       #endif
-       
-       info_file = info_file + name_length +2 ;
-       file_nr++;
+        int name_length;
+        unsigned char* size_string;
+
+
+        if( entry != NULL ) {
+            entry->next = (md9781_playlist_entry*)malloc(sizeof(md9781_playlist_entry) );
+            entry = entry->next;
+        }
+        else {
+            entry = (md9781_playlist_entry*)malloc(sizeof(md9781_playlist_entry) );
+        }
+
+        name_length = index(info_file, 0xd ) - (char*)info_file;
+        info_file[name_length] = 0;
+        size_string =  index( info_file, '#' ) +1 ;
+        size_string[-1] = 0;
+        entry->next = NULL;
+        entry->name = strdup(info_file);
+        entry->size = atoi( size_string );
+        if( playlist == NULL )
+            playlist = entry;
+
+        info_file = info_file + name_length +2 ;
     }
 
+    free(orig_info_file);
     return playlist;
 }
 
 int md9781_upload_playlist( usb_dev_handle* dh,
                             char location,
-                            struct info_file_entry** playlist ) {
+                            md9781_entry* playlist ) {
     char* info_file = (char*)malloc(8192);
-    int i, len;
+    md9781_entry* entry = playlist;
+    int len;
 
     len = 0;
-    for( i = 0; playlist[i] != NULL ; i++ ) 
-        len += sprintf( info_file + len, "%s#%ld\r\n", playlist[i]->name, playlist[i]->size -16 );
-
-    printf("%s\n", info_file);
-    
-    /* delete the old info file */
-    md9781_delete_file( dh, MD9781_INFO_FILE, location );
-
-    md9781_upload_file_from_buffer(dh, location, "tmpFname.txt", info_file, strlen(info_file) );
-
-    return 1;
-}
-
-int md9781_regenerate_playlist( usb_dev_handle* dh,char location ) {
-    char* info_file = (char*)malloc(8192);
-    struct file_descriptor ** files;
-    int len, i;
-
-printf("regenerating playlist\n");
-    files = md9781_file_list(dh, location);
-    memset( info_file, 0, 8192 );
-    len = 0;
-    i = 0;
-    while( files[i] != NULL ) {
-        len += sprintf( info_file + len, "%s#%ld\r\n", files[i]->name, files[i]->size -16 );
-        i++;
+    while( entry != NULL ) {
+        len += sprintf( info_file + len, "%s#%ld\r\n", entry->long_name, entry->size -16 );
+        entry = entry->next;
     }
-printf("%s\n", info_file );
-    md9781_delete_file( dh, MD9781_INFO_FILE, location );
+
+    #ifdef DEBUG
+    printf("Writing info file:\n");
+    printf("%s\n", info_file);
+    #endif
+
+    /* delete the old info file */
+    md9781_delete_file( dh, MD9781_INFO_FILE, location,playlist);
+
     md9781_upload_file_from_buffer(dh, location, "tmpFname.txt", info_file, strlen(info_file) );
     
     free(info_file);
     return 1;
 }
 
-void md9781_freemem_playlist( struct info_file_entry** playlist ) {
-   int i = 0;
-   if( playlist != NULL ) {
-      while( playlist[i] != NULL ) {
-         free(playlist[i]->name);
-	 free(playlist[i]);
-	 i++;
-      }
-   }
+int md9781_init_playlist( usb_dev_handle* dh,
+                            char location ) {
+    char* info_file = (char*)malloc(256);
+    memset( info_file, 0, 256 );
+    memcpy( info_file, "tmpFname.txt#17\r\n", 17 );
+    md9781_upload_file_from_buffer(dh, location, "tmpFname.txt", info_file, strlen(info_file) );
+    free(info_file);
+    return 1;
+}
+
+int md9781_regenerate_playlist( usb_dev_handle* dh,char location ) {
+    char* info_file = (char*)malloc(8192);
+    md9781_entry* playlist;
+    md9781_entry* entry;
+    int len, i;
+
+    ignore_info_file();
+    printf("regenerating playlist\n");
+    playlist = md9781_file_list(dh, location);
+    memset( info_file, 0, 8192 );
+    len = 0;
+    i = 0;
+    entry = playlist;
+    while( entry != NULL ) {
+        len += sprintf( info_file + len, "%s.%s#%ld\r\n", entry->short_name,entry->extension, entry->size -16 );
+        entry = entry->next;
+    }
+    printf("%s\n", info_file );
+
+    /* is the first file on the player the info file ? */
+
+    printf("%d\n", (playlist->size < MAX_INFO_FILE_SIZE) );
+    printf("%d\n", ( strcmp( playlist->short_name , "tmpFname" ) == 0 ) );
+    printf("%d\n", ( strcmp( playlist->short_name , "temp0000" ) == 0 ) );
+
+    if( (playlist->size < MAX_INFO_FILE_SIZE) &&
+            (( strcmp( playlist->short_name , "tmpFname" ) == 0 ) ||
+             ( strcmp(playlist->short_name, "TEMP 000") == 0 ) )
+      ) {
+        printf("deleting old info file\n");
+        md9781_delete_file( dh, MD9781_INFO_FILE, location, playlist );
+    }
+
+    md9781_upload_file_from_buffer(dh, location, "tmpFname.txt", info_file, strlen(info_file) );
+
+    free(info_file);
+    return 1;
+}
+
+void md9781_freemem_playlist( md9781_playlist_entry* playlist ) {
+    md9781_playlist_entry* entry = playlist;
+    md9781_playlist_entry* old;
+
+    if( playlist != NULL ) {
+        while( playlist != NULL ) {
+            free(playlist->name);
+            old = entry;
+            entry = old->next;
+            free(old);
+        }
+    }
 }
