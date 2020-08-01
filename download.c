@@ -1,10 +1,3 @@
-#include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <time.h>
-
 #include "common.h"
 #include "libmd9781.h"
 
@@ -12,13 +5,13 @@ int md9781_download_file( usb_dev_handle* dh,
                           const char* filename,
                           int nr,
                           char location,
-                          md9781_entry* playlist ) {
+                          md9781_entry* playlist,
+			  void (*callback)(int percent_done) ) {
     unsigned char send_buffer[256];
     int retval;
     FILE* file = fopen( filename, "w");
     long filesize;
-    int chunks;
-    int i;
+    int chunks,i,last_value;
 
     if( location != 'M' && location != 'S' )
         return 0;
@@ -70,26 +63,28 @@ int md9781_download_file( usb_dev_handle* dh,
 
 
     /* read the file */
+    last_value = 0;
     for(  i = 0; i < chunks; i++ ) {
         int length = 512;
         unsigned char buffer[512];
 
         memset( buffer, 0, 512);
-        retval = usb_bulk_read(dh, 3, buffer, 512, USB_SHORT_TIMEOUT);
-        //  dump_buffer( buffer, 512  );
-        //printf("%d\n", retval);
-
-        if (retval < 0) {
-            error_message("upload_file", "md9781_read failed");
-            return 1;
-        }
-
+        retval = md9781_bulk_read(dh, buffer, 512);
+	
         if( (i+1) * 512 > filesize )
             length = filesize % 512;
-
+	    
         fwrite( buffer, 1, length, file );
+
+	if( callback != NULL ) {
+	    int percent_done = (i / (double)chunks) * 100;
+	    if( percent_done != last_value ) {
+       	       callback( percent_done );
+	    }
+	    last_value = percent_done;
+	}
     }
     fclose(file);
-    return 0;
+    return 1;
 }
 

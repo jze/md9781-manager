@@ -1,10 +1,3 @@
-#include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <time.h>
-
 #include "common.h"
 #include "libmd9781.h"
 
@@ -69,10 +62,11 @@ int md9781_upload_file_from_buffer( usb_dev_handle* dh,char location,
 int md9781_upload_file( usb_dev_handle* dh,
                         const char* filename,
                         char location,
-                        md9781_entry* playlist ) {
+                        md9781_entry* playlist,
+			void (*callback)(int percent_done) ) {
     unsigned char send_buffer[256];
     long filesize;
-    int filetime, filedate, read, chunks, i;
+    int filetime, filedate, read, chunks, i, last_value;
     struct stat*  filestat = (struct stat *)malloc( sizeof( struct stat) );
     FILE* file = fopen( filename, "r");
     time_t t;
@@ -131,6 +125,7 @@ int md9781_upload_file( usb_dev_handle* dh,
 
     entry->long_name = long_target;
     entry->size = filesize - 16;
+    entry->next = NULL;
 
     /* prepare the send_buffer */
     memset(send_buffer, 0, 256);
@@ -174,6 +169,7 @@ int md9781_upload_file( usb_dev_handle* dh,
 
     /* send the file */
     i = 0;
+    last_value = 0;
     read = 512;
     while( read == 512 ) {
         unsigned char buffer[512];
@@ -181,6 +177,13 @@ int md9781_upload_file( usb_dev_handle* dh,
         memset(buffer, 0, 512);
         read = fread( buffer, 1, 512, file );
         md9781_bulk_write(dh, buffer, 512);
+	if( callback != NULL ) {
+	    int percent_done = (i++ / (double)chunks) * 100;
+	    if( percent_done != last_value ) {
+       	       callback( percent_done );
+	    }
+	    last_value = percent_done;
+	}
         /*  printf("%2.2f %% done\n", (i++ / (double)chunks) * 100 ); */
     }
 

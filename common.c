@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <malloc.h>
 #include "common.h"
 
 int use_info_file = 1;

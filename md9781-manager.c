@@ -1,7 +1,4 @@
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include "libmd9781.h"
+#include "config.h"
 #include "libmd9781.h"
 
 #define ACTION_DELETE	1
@@ -13,25 +10,33 @@
 #define ACTION_INITIALIZE_PLAYLIST	7
 
 void print_usage() {
+    fprintf(stderr, "md9781-manager version %s\n", MD9781_VERSION );
     fprintf(stderr, "USAGE: md9781-manager <options> <command>\n" );
     fprintf(stderr, "\nOPTIONS:\n");
-    fprintf(stderr, "-e            use smartmedia card\n");
+    fprintf(stderr, "-e           use smartmedia card\n");
+    fprintf(stderr, "-i           ignore playlist (if you know what you do)\n");
     fprintf(stderr, "\nCOMMANDS:\n");
     fprintf(stderr, "-d <nr>      delete file number nr\n");
     fprintf(stderr, "-l           list files\n");
-    fprintf(stderr, "-i           ignore playlist (if you know what you do)\n");
-    fprintf(stderr, "-p <file> [targetname]\n");
-    fprintf(stderr, "             put a file to the player\n");
-    fprintf(stderr, "             (if targetname is given the file will get that name on the player)\n");
+    fprintf(stderr, "-p <file>    put a file to the player\n");
     fprintf(stderr, "-g <nr>      get file number nr and save it in the current directory\n");
+    fprintf(stderr, "-r           regenerate playlist (if you know what you do)\n");
+}
+
+void print_percent_done(int value ) {
+    int i= 0;
+    for( i=0; i<9; i++)
+        printf("%c", 8 );
+    printf("%3.0d%% done", value );
+    fflush( stdout );
 }
 
 int main( int argc, char **argv) {
-    int i,action_count=0, nr = 0,action;
+    int i,action_count=0, nr = 0,action = 0;
     md9781_entry* playlist = NULL;
     char location = 'M';
     usb_dev_handle* md9781_handle;
-    char* source;
+    char* source = NULL;
     int max_retries = 5, retries = 0;
 
     for( i = 1; i < argc; i++ ) {
@@ -107,7 +112,7 @@ int main( int argc, char **argv) {
     }
 
     if( action == ACTION_DELETE ) {
-        if( nr > 0 ) {
+        if( nr > 0 && nr < md9781_number_of_files( playlist ) ) {
             printf("Deleting file #%d...\n", nr);
             if( md9781_delete_file( md9781_handle , nr,  location,playlist ) )
                 printf("File #%d  deleted.\n", nr);
@@ -123,8 +128,8 @@ int main( int argc, char **argv) {
 
         if( playlist == MD9781_NO_FILE_ON_PLAYER )  {
             printf("| NO FILES ON PLAYER - please use '--init' to create a new info-file           |\n");
-        printf("+------------------------------------------------------------------------------+\n");
-	    exit(0);
+            printf("+------------------------------------------------------------------------------+\n");
+            exit(0);
         }
 
         while( playlist != NULL ) {
@@ -145,18 +150,25 @@ int main( int argc, char **argv) {
                100.0 - sum_filesize / (64.0 * 1024.0 * 1024.0) * 100.0 );
         printf("+------------------------------------------------------------------------------+\n");
     } else if( action == ACTION_DOWNLOAD) {
-        /* get a file from the player (download) */
-        if( nr > 0 ) {
-	   char* filename = md9781_entry_number( playlist, nr )->long_name;
+        if( nr > 0 && nr < md9781_number_of_files( playlist ) ) {
+            char* filename = md9781_entry_number( playlist, nr )->long_name;
             printf("Getting file #%d will call it '%s'...\n", nr, filename);
-            if( md9781_download_file( md9781_handle , filename, nr, location,playlist ) )
-                printf("File #%d saved.\n", nr);
+            if( md9781_download_file( md9781_handle,
+                                      filename,
+                                      nr,
+                                      location,
+                                      playlist,
+                                      print_percent_done ) )
+                printf("\nFile #%d saved.\n", nr);
         }
     } else if( action == ACTION_UPLOAD ) {
-        /* put a file on the player (upload) */
         printf("Putting %s to the player\n", source);
-        if( md9781_upload_file( md9781_handle, source, location,playlist) ) {
-            printf("File has been uploaded.\n");
+        if( md9781_upload_file( md9781_handle,
+                                source,
+                                location,
+                                playlist,
+                                print_percent_done) ) {
+            printf("\nFile has been uploaded.\n");
         }
     } else if( action == ACTION_REGENERATE_PLAYLIST ) {
         md9781_regenerate_playlist( md9781_handle, location );

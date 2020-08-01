@@ -5,8 +5,8 @@
 
 #define MD9781_INTERN   'M'
 #define MD9781_EXTERN   'S'
-
 #define MD9781_NO_FILE_ON_PLAYER	(md9781_entry*)1
+#define MD9781_VERSION  "0.2.1"
 
 extern struct usb_device *md9781_dev;
 
@@ -41,12 +41,14 @@ int md9781_download_file( usb_dev_handle* dh,
                           const char* filename, 
 			  int nr, 
 			  char location,
-			  md9781_entry* playlist  );
+			  md9781_entry* playlist,
+			  void (*callback)(int percent_done)  );
 
 int md9781_upload_file( usb_dev_handle* dh, 
                         const char* filename,  
 			char location,
-			md9781_entry* playlist );
+			md9781_entry* playlist,
+			void (*callback)(int percent_done) );
 
 int md9781_number_of_files( md9781_entry* playlist );
 

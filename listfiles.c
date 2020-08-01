@@ -1,8 +1,5 @@
 #include "common.h"
 #include "libmd9781.h"
-#include <stdio.h>
-#include <string.h>
-#include <malloc.h>
 
 md9781_entry* convert_file_entry( const unsigned char* buffer) {
     md9781_entry* file = (md9781_entry*)malloc(sizeof(md9781_entry));

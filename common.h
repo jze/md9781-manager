@@ -3,6 +3,7 @@
 
 #include <usb.h>
 #include "libmd9781.h"
+#include "config.h"
 
 #define MD9781_SUCCESS                0
 #define MD9781_ERROR                 -1

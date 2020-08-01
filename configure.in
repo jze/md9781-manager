@@ -1,0 +1,28 @@
+# input file for autoconf
+
+# initialize autoconf
+AC_INIT()
+
+# tell configure to generate config.h out of config.h.in
+AC_CONFIG_HEADER(config.h)
+
+# search for a "C" compiler
+AC_PROG_CC()
+# add the -Wall flags to the "C"-flags.
+CFLAGS="$CFLAGS -Wall"
+
+# check for headers. if a header is found then the
+# preprocessor variable in config.h.in will be set.
+AC_CHECK_HEADERS(string.h stdio.h stdlib.h malloc.h time.h unistd.h usb.h \
+                 sys/stat.h sys/types.h time.h)
+
+# check for the function socket in a lib called socket
+# neccasary for solaris
+AC_CHECK_LIB(usb, usb_init, 
+             USB_LIBS="-lusb",
+	     AC_MSG_ERROR(libusb needed))
+AC_SUBST(USB_LIBS)
+
+
+# generate the Makefile out of Makefile.in
+AC_OUTPUT(Makefile)

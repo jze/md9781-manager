@@ -1,7 +1,5 @@
 #include "common.h"
 #include "libmd9781.h"
-#include <stdio.h>
-#include <stdlib.h>
 
 int md9781_delete_file( usb_dev_handle* dh, int file_number, char location,
                         md9781_entry* playlist ) {
