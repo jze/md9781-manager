@@ -6,26 +6,38 @@ int md9781_download_file( usb_dev_handle* dh,
                           int nr,
                           char location,
                           md9781_entry* playlist,
-                          void (*callback)(int percent_done) ) {
+                          void (*callback)(int percent_done, float speed) ) {
     unsigned char send_buffer[256];
     int retval;
     FILE* file = fopen( filename, "w");
     md9781_entry* playlist_mem = NULL;
-    long filesize;
+    long filesize = 0;
     int chunks,i,last_value;
+    const int chunksize = 2048;
+    double starttime;
+    unsigned char buffer[chunksize];
+    int length = filesize % chunksize;
 
+    if(file == NULL) {
+      perror(filename);
+      return 0;
+    }
     if( location != 'M' && location != 'S' )
         return 0;
 
     /* get list of files */
-    if(playlist == NULL)
+    if(playlist == NULL) {
       playlist = playlist_mem = md9781_file_list(dh, location);
+      if( ! playlist)
+	return 0;
+    }
 
     for( i = 0; i < nr; i++ ) {
         playlist = playlist->next;
     }
     filesize = playlist->size - 16;
-    chunks = filesize / 512 + 1;
+    // filesize /= 3;              // §
+    chunks = filesize / chunksize + 1;
 
     #ifdef DEBUG
     printf("Exspecting a %ld byte (%d packets) long file.\n", filesize, chunks);
@@ -63,28 +75,41 @@ int md9781_download_file( usb_dev_handle* dh,
     dummy_read(dh);
     dummy_read(dh);
 
-
     /* read the file */
+    starttime = getsec();
     last_value = 0;
-    for(  i = 0; i < chunks; i++ ) {
-        int length = 512;
-        unsigned char buffer[512];
+    /* read all complete chunks - stop before last incomplete chunk
+       before end of file, to prevent read errors */
+    for( i = 0; i < chunks-1; i++ ) {
+      memset( buffer, 0, chunksize);
+      
+      retval = md9781_bulk_read(dh, buffer, chunksize);
+      fwrite( buffer, 1, chunksize, file );
+      
+      if( callback != NULL ) {
+	int percent_done = ( (i+1) / (double)chunks) * 100;
+	if( percent_done != last_value ) {
+	  callback( percent_done, (i+1)*chunksize/(getsec() - starttime) );
+	}
+	last_value = percent_done;
+      }
+    }
+    /* now read the last (incomplete) chunk, using a smaller block size */
+    if(length > 0) {
+      const int small_block = 512;
+      int write_length = small_block;
+      /* find number of complete + incomplete small blocks */
+      int n_blocks = length / small_block;
+      if(length % small_block)
+	n_blocks++;
+	
+      for( i = 0; i < n_blocks; i++) {
+	if( (i+1) * small_block > length )
+	  write_length = length % small_block;
 
-        memset( buffer, 0, 512);
-        retval = md9781_bulk_read(dh, buffer, 512);
-
-        if( (i+1) * 512 > filesize )
-            length = filesize % 512;
-
-        fwrite( buffer, 1, length, file );
-
-        if( callback != NULL ) {
-            int percent_done = (i / (double)chunks) * 100;
-            if( percent_done != last_value ) {
-                callback( percent_done );
-            }
-            last_value = percent_done;
-        }
+	retval = md9781_bulk_read(dh, buffer, small_block);
+	fwrite( buffer, 1, write_length, file);
+      }
     }
 
     fclose(file);
@@ -117,7 +142,7 @@ static int fp_download(int nr, void *args ) {
 
 
 int md9781_download_range(usb_dev_handle* dh, char *range, char location,
-                          md9781_entry* playlist, void (*callback)(int percent_done)  ) {
+                          md9781_entry* playlist, void (*callback)(int percent_done, float speed)  ) {
     Passed_args passdown_args = {
         dh, location, playlist, callback
     };

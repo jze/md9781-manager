@@ -1,27 +1,30 @@
-CC=@CC@
-CFLAGS=@CFLAGS@
-LIBS=@USB_LIBS@
-
-OBJECTS =  md9781-manager.o common.o listfiles.o delete.o download.o upload.o playlist.o format.o
+prefix= @prefix@
+exec_prefix=@exec_prefix@
 
 .PHONY:   clean all
 
-all: md9781-manager 
+all: 
+	cd lib && make all 
+	cd md9781-manager && make all
 
-md9781-manager: $(OBJECTS)
-	$(CC) $(CFLAGS) -o md9781-manager $(OBJECTS) $(LIBS)
-	
 clean:
-	rm -f $(OBJECTS)
-	rm -f *~
-	rm -f *.orig
-	rm -f md9781-manager 
+	cd lib && make clean
+	cd md9781-manager && make clean
 
 tidy:	clean
-	rm config.h config.log config.status Makefile
+	cd lib && make tidy
+	cd md9781-manager && make tidy
+	rm -rf autom4te.cache
+	rm -fr debian/tmp
+	rm -f config.h config.log config.status Makefile 
 
-%.o: %.c
-	$(CC) -c $(CFLAGS) $<
-
-install:  md9781-manager 
-	cp md9781-manager /usr/local/bin
+install:
+	mkdir -p @libdir@
+	mkdir -p @bindir@
+	mkdir -p @includedir@
+	mkdir -p @mandir@
+	mkdir -p @mandir@/man1
+	mkdir -p @prefix@/etc/hotplug/usb/
+	cd lib && make install
+	cd md9781-manager && make install
+	cp usb-hotplug/* @prefix@/etc/hotplug/usb/

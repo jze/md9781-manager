@@ -188,16 +188,13 @@ int md9781_regenerate_playlist( usb_dev_handle* dh,char location ) {
     return 1;
 }
 
-void md9781_freemem_playlist( md9781_playlist_entry* playlist ) {
-    md9781_playlist_entry* entry = playlist;
+void md9781_freemem_playlist( md9781_playlist_entry* entry ) {
     md9781_playlist_entry* old;
 
-    if( playlist != NULL ) {
-        while( entry != NULL ) {
-            free(playlist->name);
-            old = entry;
-            entry = old->next;
-            free(old);
-        }
+    while( entry != NULL ) {
+      free(entry->name);
+      old = entry;
+      entry = entry->next;
+      free(old);
     }
 }

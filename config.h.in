@@ -54,3 +54,21 @@
 #include <time.h>
 #endif
 
+/* Define if you have the <sys/time.h> header file. */
+#undef HAVE_SYS_TIME_H
+#if HAVE_SYS_TIME_H
+#include <sys/time.h>
+#endif
+
+/* Define if you have the <sys/ioctl.h> header file. */
+#undef HAVE_SYS_IOCTL_H
+#if HAVE_SYS_IOCTL_H
+#include <sys/ioctl.h>
+#endif 
+
+/* Define if you have the <math.h> header file. */
+#undef HAVE_MATH_H
+#if HAVE_MATH_H
+#include <math.h>
+#endif
+

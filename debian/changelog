@@ -1,0 +1,26 @@
+md9781manager (0.3.1-3) unstable; urgency=medium
+
+  * 2003-06-11: the md6242 will be detected, too
+
+ -- Jesper Zedlitz <jesper@zedlitz.de>  Wed, 11 Jun 2003 13:33:00 +0200
+  
+md9781manager (0.3-2) unstable; urgency=low
+
+  * 2003-06-10: added hotplugging scripts
+
+ -- Jesper Zedlitz <jesper@zedlitz.de>  Tue, 10 Jun 2003 14:21:00 +0200
+
+md9781manager (0.3-1) unstable; urgency=low
+
+  * 2003-03-24: New version 0.2.3  
+
+    + applied several patches (most of them from Dietrich Rothe),
+    + error correction after communication failure, 
+    + fixed problem when deleting large files,
+    + added format function,
+    + 3 percent of uploads used to fail - fixed,
+    + Debian package available,
+    + I have splitted the program into the md9781 library and the 
+      md9781-manager frontend
+
+ -- Jesper Zedlitz <jesper@zedlitz.de>  Mon, 24 Mar 2003 14:30:02 +0100

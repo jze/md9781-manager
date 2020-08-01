@@ -2,6 +2,10 @@
 
 int use_info_file = 1;
 
+/* sizes in KB,  -1 = not yet known */
+int smc_size;
+int internal_size;
+
 void error_message(unsigned char *hdr, unsigned char *txt) {
     fprintf(stderr, "\nERROR: %-15.15s %s\n", hdr, txt);
 }
@@ -19,7 +23,10 @@ usb_dev_handle*  md9781_open() {
     struct usb_device *dev;
     usb_dev_handle* md9781_handle;
 
-    usb_find_busses();
+    internal_size = -1;
+	 smc_size = -1;
+	 
+	 usb_find_busses();
     usb_find_devices();
 
     /* initialize the usb stuff */
@@ -36,7 +43,11 @@ usb_dev_handle*  md9781_open() {
                     && (dev->descriptor.idProduct == 0x1003 )) {
                 md9781_dev = dev;
                 debug_message("md9781_initialize", "md9781 device found");
-            }
+            } else if ((dev->descriptor.idVendor == 0xaa9 )
+	 	    && (dev->descriptor.idProduct == 0xf01b )) {
+		md9781_dev = dev;
+		debug_message("md9781_initialize", "md6242 device found");
+	    }
         }
     }
 
@@ -86,6 +97,10 @@ int dummy_read( usb_dev_handle* dh ) {
     dump_buffer( buffer, 256, "dummy_read" );
 
     return 0;
+}
+
+int md9781_dummy_read( usb_dev_handle* dh ) {
+   return dummy_read( dh );
 }
 
 /** writes 256 zero bytes from the bus */
@@ -174,7 +189,7 @@ int md9781_bulk_write( usb_dev_handle* dh, char* buffer, int size ) {
 }
 
 int md9781_bulk_read_with_timeout( usb_dev_handle* dh, char* buffer, int size,
-                                   int timeout ) {
+                                   long timeout ) {
     int retval;
     retval = usb_bulk_read(dh, 3, buffer, size, timeout);
     if (retval < 0) {
@@ -195,6 +210,11 @@ void ignore_info_file() {
 }
 
 
+double getsec() {
+  struct timeval t;
+  gettimeofday(&t, 0);
+  return (double)t.tv_sec + t.tv_usec / 1000000.0;
+}
 
 /* return -1 on error, >= 0 (number of deleted items) on success
  * fp point to a function that returns 1 on success and takes the
@@ -203,7 +223,7 @@ void ignore_info_file() {
 int exec_on_range(int low, int high, char *range, int (*fp)(int n, void *arg), void *arg) {
     char accept[] = "0123456789-,";
     int n_exec = 0;
-    int nmax = high - low +1;	// max number of entries in field
+    int nmax = high - low +1;	/* max number of entries in field */
     int field[nmax];
     int i, j, last_field;
     char *trange = range;
@@ -212,13 +232,13 @@ int exec_on_range(int low, int high, char *range, int (*fp)(int n, void *arg), v
     for(i = 0; i < nmax; i++)
         field[i] = 0;
 
-    // check for invalid chars
+    /* check for invalid chars */
     if(strspn(range, accept) != strlen(range)) {
         fprintf(stderr, "range string error: invalid char(s) used\n");
         return -1;
     }
 
-    // process the comma seperated ranges list - one field at a time
+    /* process the comma seperated ranges list - one field at a time */
     for(last_field = 0; !last_field; trange = tp + 1) {
         char invalid_range_err[] = "range error: %d not in valid range\n";
         char *first, *second;
@@ -232,10 +252,9 @@ int exec_on_range(int low, int high, char *range, int (*fp)(int n, void *arg), v
 
         /* process the string [^,]<string>[,$]
          * it may be an integer, a range #-#, or an incomplete range -#, #- 
-        */
-        // printf("field: %s\n", trange);
+         */
         second = index(trange, '-');
-        if(second == NULL) {	// no slash - one number
+        if(second == NULL) {	/* no dash - one number */
             i = atoi(trange);
             if(i >= low && i <= high)
                 field[i - low] = 1;
@@ -243,7 +262,7 @@ int exec_on_range(int low, int high, char *range, int (*fp)(int n, void *arg), v
                 fprintf(stderr, invalid_range_err, i);
                 return -1;
             }
-        } else {			// a range x-y
+        } else {			/* a range x-y */
             first = trange;
             *second = 0;
             second++;
@@ -254,7 +273,7 @@ int exec_on_range(int low, int high, char *range, int (*fp)(int n, void *arg), v
                     fprintf(stderr, invalid_range_err, i);
                     return -1;
                 }
-            } else			// first is empty
+            } else			/* first is empty */
                 i = low;
 
             if(strlen(second) != 0) {
@@ -263,7 +282,7 @@ int exec_on_range(int low, int high, char *range, int (*fp)(int n, void *arg), v
                     fprintf(stderr, invalid_range_err, j);
                     return -1;
                 }
-            } else			// second is empty
+            } else			/* second is empty */
                 j = high;
 
             if(j < i ) {
@@ -286,4 +305,8 @@ int exec_on_range(int low, int high, char *range, int (*fp)(int n, void *arg), v
     }
 
     return n_exec;
+}
+
+char* md9781_get_version() {
+    return MD9781_VERSION;
 }

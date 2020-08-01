@@ -28,15 +28,25 @@ typedef struct _md9781_playlist_entry {
 md9781_playlist_entry;
 
 extern int use_info_file;
+/* sizes in KB */
+extern int internal_size;
+extern int smc_size;
 
 void debug_message(unsigned char *hdr, unsigned char *txt);
 void error_message(unsigned char *hdr, unsigned char *txt);
+
 usb_dev_handle*  md9781_open();
+
 int dummy_write( usb_dev_handle *dh );
 int dummy_read( usb_dev_handle *dh );
+
 void dump_buffer(  const unsigned char* buffer, int size, const char* );
+
 int md9781_bulk_write( usb_dev_handle* dh, char* buffer, int size );
+
 int md9781_bulk_read( usb_dev_handle* dh, char* buffer, int size );
+int md9781_bulk_read_with_timeout( usb_dev_handle* dh, char* buffer, int size, long timeout );
+
 int md9781_upload_file_from_buffer( usb_dev_handle* dh,char location,
                                     char* filename, unsigned char* file_buffer, int length );
 
@@ -53,10 +63,12 @@ typedef struct {
     usb_dev_handle* dh;
     char location;
     md9781_entry* playlist;
-    void (*callback) (int percent_done);
+    void (*callback) (int percent_done, float speed);
 }
 Passed_args;
 
 int exec_on_range(int low, int high, char *range, int (*fp)(int n, void *arg), void *arg);
+
+double getsec();
 
 #endif

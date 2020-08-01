@@ -14,7 +14,7 @@ CFLAGS="$CFLAGS -Wall"
 # check for headers. if a header is found then the
 # preprocessor variable in config.h.in will be set.
 AC_CHECK_HEADERS(string.h stdio.h stdlib.h malloc.h time.h unistd.h usb.h \
-                 sys/stat.h sys/types.h time.h)
+           sys/stat.h sys/types.h sys/ioctl.h sys/time.h math.h)
 
 # check for the function socket in a lib called socket
 # neccasary for solaris
@@ -26,3 +26,5 @@ AC_SUBST(USB_LIBS)
 
 # generate the Makefile out of Makefile.in
 AC_OUTPUT(Makefile)
+AC_OUTPUT(lib/Makefile)
+AC_OUTPUT(md9781-manager/Makefile)

@@ -32,13 +32,21 @@ md9781_entry* convert_file_entry( const unsigned char* buffer) {
     return file;
 }
 
+static void long_by_shortname(md9781_entry *entry) {
+  int t;
+  entry->long_name = (char*) malloc(13);
+  t = sprintf(entry->long_name, "%s.%s", entry->short_name, entry->extension);
+  entry->long_name[t] = 0;
+}
+  
 md9781_entry* md9781_file_list( usb_dev_handle* dh, char location ) {
     unsigned char buffer[256];
     md9781_entry* start = NULL;
     md9781_entry* entry = NULL;
     md9781_playlist_entry* playlist = NULL;
     int i = 0, number_of_files;
-
+    int t_size;
+	 
     #ifdef DEBUG
 
     printf("md9781_file_list\n");
@@ -70,6 +78,26 @@ md9781_entry* md9781_file_list( usb_dev_handle* dh, char location ) {
 
     number_of_files = buffer[7];
     dummy_read(dh);
+
+    t_size = (buffer[10] << 8 | buffer[11]) * 16;
+    if(location == 'M') {
+      internal_size = t_size;
+
+      #ifdef DEBUG
+      printf("internal flash size probably: %d KB\n", internal_size);
+      #endif
+    } else {
+      smc_size = t_size;
+      if(smc_size == 0) {
+	fprintf(stderr, "error: there is no external flash card - cannot access it\n");
+	return NULL;
+      }
+      
+      #ifdef DEBUG
+      printf("smc size probably: %d KB\n", smc_size);
+      #endif
+    }
+    
     #ifdef DEBUG
 
     printf("number of files: %d\n", number_of_files );
@@ -103,7 +131,7 @@ md9781_entry* md9781_file_list( usb_dev_handle* dh, char location ) {
 
         if( !strcmp(start->short_name,"tmpFname") && use_info_file ) {
             md9781_playlist_entry *tpl, *old_tpl, *tpl_prev;
-            playlist = md9781_play_list( dh, location, start );
+	    playlist = md9781_play_list( dh, location, start );
 
             /* merge list of files from the filesystem of the player
              * with the playlist 
@@ -140,13 +168,14 @@ md9781_entry* md9781_file_list( usb_dev_handle* dh, char location ) {
                         found = 1;
 			old_tpl = tpl;
 			tpl = tpl->next;
-			
+
 			// algorithm speedup (not neccessary): delete list item
 			if(tpl_prev != NULL) {
 			  tpl_prev->next = old_tpl->next;
 			  old_tpl->next = NULL;
 			  md9781_freemem_playlist(old_tpl);
-			}
+			} else
+			  tpl_prev = old_tpl;
 			
 		  } else {
 		    tpl_prev = tpl;
@@ -155,15 +184,16 @@ md9781_entry* md9781_file_list( usb_dev_handle* dh, char location ) {
 		  free(tmp_short_name);
 		}
                 if(!found) {
-                    entry->long_name = entry->short_name;
+		  long_by_shortname(entry);
                 }
 
                 entry = entry->next;
             }
+	    md9781_freemem_playlist(playlist);
         } else {
             entry = start;
             while( entry != NULL ) {
-                entry->long_name = entry->short_name;
+                long_by_shortname(entry);
                 entry = entry->next;
             }
         }
@@ -187,6 +217,49 @@ void md9781_freemem_filelist( md9781_entry* files ) {
     }
 }
 
+/* calls md9781_list_files, if size not yet known */
+int md9781_flash_size( usb_dev_handle* dh, char location ) {
+  md9781_entry* t = NULL;
+  
+  if( location != 'M' && location != 'S' )
+    return 0;
+  if( location == 'M' ) {
+    if(internal_size == -1) {
+      t = md9781_file_list(dh, location);
+      if(t)
+	md9781_freemem_filelist(t);
+    }
+    return internal_size;
+  } else {
+    if(smc_size == -1) {
+      t = md9781_file_list(dh, location);
+      if(t)
+	md9781_freemem_filelist(t);
+    }
+    return smc_size;
+  }
+}
+
+int md9781_round_to_bs(int size) {
+  const int blocksize = 16*1024;
+  return (int)ceil( (double)size / blocksize) * blocksize;
+}
+  
+/* this respects overhead caused by fat and use of blocks */
+int md9781_freesize_kb( int memsize_kb, md9781_entry* playlist) {
+  int size = memsize_kb;
+  /* reserve extra size for info file - it will grow on uploads */
+  int info_ext = 1024;
+  while(playlist != NULL) {
+    size -= md9781_round_to_bs( playlist->size - 16 + info_ext) / 1024;
+    info_ext = 0;
+    playlist = playlist->next;
+  }
+  /* fat causes about 64 kb overhead */
+  size -= 64;
+  return size;
+}
+  
 /* gets the nr'th entry from the playlist */
 md9781_entry*  md9781_entry_number( md9781_entry* playlist, int nr ) {
     md9781_entry* my_playlist = playlist;
@@ -211,39 +284,4 @@ int md9781_number_of_files( md9781_entry* playlist ) {
 }
 
 
-void md9781_print_playlist( md9781_entry* playlist ) {
-    md9781_entry* my_playlist;
-    int i = 1;
-    long sum_filesize = 0;
-    
-    if(playlist)
-      my_playlist = playlist->next;
-    else {
-      my_playlist = playlist;
-      printf("warning: no info file. you should create one\n");
-    }
-
-    printf("+-----+-----------------------------------------------+----------+----------+------------+----------+\n");
-    printf("|   # | Filename (long)                               | (short)  | Size     | Date       | Time     |\n");
-    printf("+-----+-----------------------------------------------+----------+----------+------------+----------+\n");
-    while( my_playlist != NULL ) {
-        printf("| %3d ", i++ );
-        printf("| %-45.45s ", my_playlist->long_name );
-        printf("| %-8.8s ", my_playlist->short_name );
-        printf("| %8ld ", my_playlist->size - 16 );
-        printf("| %02d-%02d-%02d ", my_playlist->year, my_playlist->month,my_playlist->day );
-        printf("| %02d:%02d:%02d ", my_playlist->hour, my_playlist->minute, my_playlist->second );
-        printf("|\n");
-        sum_filesize += my_playlist->size;
-        my_playlist = my_playlist->next;
-    }
-
-    printf("+-----+-----------------------------------------------+----------+----------+------------+----------+\n");
-    printf("| Used: %5.0f kB /", sum_filesize / 1024.0 );
-    printf(" Free: %5.0f kB (%2.0f %%)                                                            |\n",
-           64.0 * 1024.0 - sum_filesize / 1024.0 ,
-           100.0 - sum_filesize / (64.0 * 1024.0 * 1024.0) * 100.0 );
-    printf("+---------------------------------------------------------------------------------------------------+\n");
-
-}
 

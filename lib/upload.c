@@ -63,12 +63,12 @@ int md9781_upload_file( usb_dev_handle* dh,
                         const char* filename,
                         char location,
                         md9781_entry* playlist,
-                        void (*callback)(int percent_done) ) {
+                        void (*callback)(int percent_done, float speed) ) {
     unsigned char send_buffer[256];
     long filesize;
     int filetime, filedate, read, chunks, i, last_value;
     struct stat*  filestat = (struct stat *)malloc( sizeof( struct stat) );
-    FILE* file = fopen( filename, "r");
+    FILE* file = NULL;
     time_t t;
     struct tm*  tm;
     char* long_target_old = strdup( filename );
@@ -79,16 +79,54 @@ int md9781_upload_file( usb_dev_handle* dh,
     md9781_entry* entry = (md9781_entry*)malloc(sizeof(md9781_entry));
     unsigned char* extension_temp;
     int numbered_names = 0;
-
+    const int chunksize = 1024 * 4;
+    double starttime;
+    int err = 0;
+    
     #ifdef DEBUG
     printf("md9781_upload_file\n");
     #endif
 
+    /* error sensitive functions and error checking should be done as
+       soon as possible */
+    
+    /* get some information about the file */
+    if(stat( filename, filestat ) == -1) {
+      perror(filename);
+	err = -1;
+    } else {
+      if( (file = fopen( filename, "r")) == NULL) {
+	err = -2;
+	perror(filename);
+      }
+    }
+    filesize =  filestat->st_size;
+    chunks = filesize / chunksize;
+      
     if( location != 'M' && location != 'S' )
-        return 0;
+      err = -3;
 
-    if( playlist == NULL )
+    if( playlist == NULL ) {
         playlist = playlist_mem = md9781_file_list(dh, location);
+	if( ! playlist)
+	  err = -4;
+    }
+    /* check for enough free space for file - player uses 16kb blocks */
+    if(! err && md9781_freesize_kb(md9781_flash_size(dh, location), playlist)
+       < md9781_round_to_bs(filesize) / 1024 ) {
+      fprintf(stderr, "not enough free memory for %s\n", filename);
+      err = -5;
+    }
+    
+    if(err) {
+      free(filestat);
+      free(long_target_old);
+      free(entry);
+      if(file)
+	fclose(file);
+      return 0;
+    }
+      
     playlist_start = playlist;
 
     if( rindex( long_target, '/' ) != NULL )
@@ -145,11 +183,6 @@ int md9781_upload_file( usb_dev_handle* dh,
         entry->short_name[8] = 0;
     }
 
-    /* get some information about the file */
-    stat( filename, filestat );
-    filesize =  filestat->st_size;
-    chunks = filesize / 512;
-
     t = time( NULL );
     tm = localtime( &t );
 
@@ -188,6 +221,7 @@ int md9781_upload_file( usb_dev_handle* dh,
     send_buffer[21] = filetime >> 8;
 
     /* size */
+	 filesize += 16;
     send_buffer[22] = filesize>>24;
     send_buffer[23] = (filesize>>16) & 0xff;
     send_buffer[24] = (filesize>>8) & 0xff;
@@ -202,19 +236,21 @@ int md9781_upload_file( usb_dev_handle* dh,
     dummy_read(dh);
 
     /* send the file */
+    starttime = getsec();
     i = 0;
     last_value = 0;
-    read = 512;
-    while( read == 512 ) {
-        unsigned char buffer[512];
+    read = chunksize;
+    while( read == chunksize ) {
+        unsigned char buffer[chunksize];
 
-        memset(buffer, 0, 512);
-        read = fread( buffer, 1, 512, file );
-        md9781_bulk_write(dh, buffer, 512);
+        memset(buffer, 0, chunksize);
+        read = fread( buffer, 1, chunksize, file );
+        md9781_bulk_write(dh, buffer, chunksize);
         if( callback != NULL ) {
             int percent_done = (i++ / (double)chunks) * 100;
             if( percent_done != last_value ) {
-                callback( percent_done );
+                callback( percent_done,
+			  i*chunksize / (getsec() - starttime) );
             }
             last_value = percent_done;
         }

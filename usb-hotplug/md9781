@@ -1,0 +1,7 @@
+#!/bin/sh
+# 
+# /etc/hotplug/usb/md9781
+#
+chgrp users $DEVICE
+chmod g+w $DEVICE
+

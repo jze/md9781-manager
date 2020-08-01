@@ -27,8 +27,11 @@ int md9781_delete_file( usb_dev_handle* dh, int file_number, char location,
     if( location != 'M' && location != 'S' )
         return 0;
 
-    if( playlist == NULL )
+    if( playlist == NULL ) {
         playlist = playlist_mem = md9781_file_list(dh, location );
+	if( ! playlist )
+	  return 0;
+    }
 
     if( file_number >= md9781_number_of_files( playlist ) ) {
         if(playlist_mem)

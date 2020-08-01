@@ -1,0 +1,11 @@
+Source: md9781manager
+Section: contrib/utils
+Priority: optional
+Maintainer: Jesper Zedlitz <jesper@zedlitz.de>
+Standards-Version: 3.5.8
+Build-Depends: debmake
+
+Package: md9781manager
+Architecture: any
+Depends: ${shlibs:Depends}
+Description: utility to transfer files from/to a Medion MD9781 MP3-player
