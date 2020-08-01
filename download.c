@@ -10,6 +10,7 @@ int md9781_download_file( usb_dev_handle* dh,
     unsigned char send_buffer[256];
     int retval;
     FILE* file = fopen( filename, "w");
+    md9781_entry* playlist_mem = NULL;
     long filesize;
     int chunks,i,last_value;
 
@@ -17,7 +18,8 @@ int md9781_download_file( usb_dev_handle* dh,
         return 0;
 
     /* get list of files */
-    playlist = md9781_file_list(dh, location);
+    if(playlist == NULL)
+      playlist = playlist_mem = md9781_file_list(dh, location);
 
     for( i = 0; i < nr; i++ ) {
         playlist = playlist->next;
@@ -86,6 +88,10 @@ int md9781_download_file( usb_dev_handle* dh,
     }
 
     fclose(file);
+
+    if(playlist_mem)
+      md9781_freemem_filelist(playlist_mem);
+    
     return 1;
 }
 
@@ -97,18 +103,11 @@ static int fp_download(int nr, void *args ) {
         char *filename;
         md9781_entry* tentry = md9781_entry_number( arg->playlist, nr );
 
-        // the info entries containing the long name information sometimes gets mixed
-        // up, so only use long_name if it begins like short_name
-        if(strncmp(tentry->long_name, tentry->short_name, 8) == 0)
-            filename = tentry->long_name;
-        else {
-            printf("info file is corrupt, hint: use -r option to rebuild it\n(warning: that truncates names to 8 chars!\n");
-            filename = tentry->short_name;
-        }
+        filename = tentry->long_name;
 
         printf("Getting file #%d will call it '%s'...\n", nr, filename);
         if( md9781_download_file( arg->dh , filename, nr, arg->location,
-                                  arg->playlist, NULL ) ) {
+                                  arg->playlist, arg->callback ) ) {
             printf("File #%d saved.\n", nr);
             return 1;
         }
@@ -120,7 +119,7 @@ static int fp_download(int nr, void *args ) {
 int md9781_download_range(usb_dev_handle* dh, char *range, char location,
                           md9781_entry* playlist, void (*callback)(int percent_done)  ) {
     Passed_args passdown_args = {
-        dh, location, playlist
+        dh, location, playlist, callback
     };
 
     return exec_on_range(1, md9781_number_of_files(playlist) - 1,

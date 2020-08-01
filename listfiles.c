@@ -27,6 +27,8 @@ md9781_entry* convert_file_entry( const unsigned char* buffer) {
 
     file->next = NULL;
     file->prev = NULL;
+
+    file->fnumber = 0;
     return file;
 }
 
@@ -91,6 +93,8 @@ md9781_entry* md9781_file_list( usb_dev_handle* dh, char location ) {
                         entry = file;
                         if( start == NULL )
                             start = entry;
+                    } else {
+                        free(file);
                     }
                     pos = pos + 32;
                 }
@@ -98,22 +102,62 @@ md9781_entry* md9781_file_list( usb_dev_handle* dh, char location ) {
         }
 
         if( !strcmp(start->short_name,"tmpFname") && use_info_file ) {
+            md9781_playlist_entry *tpl, *old_tpl, *tpl_prev;
             playlist = md9781_play_list( dh, location, start );
-            // if( playlist == NULL )
-	    // return NULL;
 
             /* merge list of files from the filesystem of the player
              * with the playlist 
+            * each short_name (if uploaded by this program) should be
+            * _name###, were ### is an unique number.
+            * long_name is found by searching the infofile entries
+            * for an appropriate beginning, _name### will be cut off
              */
+
             entry = start;
             while( entry != NULL ) {
-                if( playlist != NULL ) {
-                    entry->long_name = playlist->name;
-                    playlist = playlist->next;
-		  
-                } else {
+                int found = 0;
+                tpl = playlist;
+		tpl_prev = NULL;
+		
+		while(tpl != NULL && !found) {
+		  // we have to compare the info name without extension,
+		  // like it's stored as short_name
+		  char *ext_p;
+		  char *tmp_short_name = strdup(tpl->name);
+		  if( (ext_p = rindex(tmp_short_name, '.')) != NULL)
+		    *ext_p = 0;
+		  if( (strncmp(entry->short_name, tmp_short_name, 8) == 0)
+		      && !tpl->used ) {
+		    
+                        entry->long_name = tpl->name;
+                        sscanf(entry->short_name, "_name%3d", &entry->fnumber);
+
+                        if(entry->fnumber && (strlen(entry->long_name) > 8 ))
+                            entry->long_name += 8;
+                        entry->long_name = strdup(entry->long_name);
+
+                        tpl->used = 1;
+                        found = 1;
+			old_tpl = tpl;
+			tpl = tpl->next;
+			
+			// algorithm speedup (not neccessary): delete list item
+			if(tpl_prev != NULL) {
+			  tpl_prev->next = old_tpl->next;
+			  old_tpl->next = NULL;
+			  md9781_freemem_playlist(old_tpl);
+			}
+			
+		  } else {
+		    tpl_prev = tpl;
+		    tpl = tpl->next;
+		  }
+		  free(tmp_short_name);
+		}
+                if(!found) {
                     entry->long_name = entry->short_name;
                 }
+
                 entry = entry->next;
             }
         } else {
@@ -135,7 +179,8 @@ void md9781_freemem_filelist( md9781_entry* files ) {
     md9781_entry* old;
 
     while( entry != NULL ) {
-        free(entry->long_name);
+        if(entry->long_name != entry->short_name)
+            free(entry->long_name);
         old = entry;
         entry = old->next;
         free( old );
@@ -147,10 +192,10 @@ md9781_entry*  md9781_entry_number( md9781_entry* playlist, int nr ) {
     md9781_entry* my_playlist = playlist;
     int i;
     for( i = 0; i < nr; i++ ) {
-      if(my_playlist->next)
-        my_playlist = my_playlist->next;
-      else
-	printf("entry_number: error: arg nr too large: %d\n", nr);
+        if(my_playlist->next)
+            my_playlist = my_playlist->next;
+        else
+            printf("entry_number: error: arg nr too large: %d\n", nr);
     }
     return my_playlist;
 }
@@ -167,17 +212,25 @@ int md9781_number_of_files( md9781_entry* playlist ) {
 
 
 void md9781_print_playlist( md9781_entry* playlist ) {
-    md9781_entry* my_playlist = playlist->next;
+    md9781_entry* my_playlist;
     int i = 1;
     long sum_filesize = 0;
+    
+    if(playlist)
+      my_playlist = playlist->next;
+    else {
+      my_playlist = playlist;
+      printf("warning: no info file. you should create one\n");
+    }
+
     printf("+-----+-----------------------------------------------+----------+----------+------------+----------+\n");
     printf("|   # | Filename (long)                               | (short)  | Size     | Date       | Time     |\n");
     printf("+-----+-----------------------------------------------+----------+----------+------------+----------+\n");
     while( my_playlist != NULL ) {
         printf("| %3d ", i++ );
         printf("| %-45.45s ", my_playlist->long_name );
-	printf("| %-8.8s ", my_playlist->short_name );
-        printf("| %8ld ", my_playlist->size );
+        printf("| %-8.8s ", my_playlist->short_name );
+        printf("| %8ld ", my_playlist->size - 16 );
         printf("| %02d-%02d-%02d ", my_playlist->year, my_playlist->month,my_playlist->day );
         printf("| %02d:%02d:%02d ", my_playlist->hour, my_playlist->minute, my_playlist->second );
         printf("|\n");

@@ -173,15 +173,21 @@ int md9781_bulk_write( usb_dev_handle* dh, char* buffer, int size ) {
     return MD9781_SUCCESS;
 }
 
-int md9781_bulk_read( usb_dev_handle* dh, char* buffer, int size ) {
+int md9781_bulk_read_with_timeout( usb_dev_handle* dh, char* buffer, int size,
+                                   int timeout ) {
     int retval;
-    retval = usb_bulk_read(dh, 3, buffer, size, USB_SHORT_TIMEOUT);
+    retval = usb_bulk_read(dh, 3, buffer, size, timeout);
     if (retval < 0) {
         error_message("md9781_bulk_read", "md9781_read failed");
         return MD9781_ERROR;
     }
     dump_buffer(buffer, size, "md9781_bulk_read");
     return MD9781_SUCCESS;
+}
+
+
+int md9781_bulk_read( usb_dev_handle* dh, char* buffer, int size ) {
+    return md9781_bulk_read_with_timeout(dh, buffer, size, USB_SHORT_TIMEOUT);
 }
 
 void ignore_info_file() {
@@ -226,7 +232,7 @@ int exec_on_range(int low, int high, char *range, int (*fp)(int n, void *arg), v
 
         /* process the string [^,]<string>[,$]
          * it may be an integer, a range #-#, or an incomplete range -#, #- 
-	 */
+        */
         // printf("field: %s\n", trange);
         second = index(trange, '-');
         if(second == NULL) {	// no slash - one number

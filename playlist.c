@@ -17,6 +17,7 @@ md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location,
     char* orig_info_file;
 
     #ifdef DEBUG
+
     printf("Reading playlist.\n");
     #endif
 
@@ -41,7 +42,8 @@ md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location,
     buffer[6] = MD9781_INFO_FILE;
     buffer[7] = 0x2e;
 
-    if( md9781_bulk_write(dh, buffer, 256) ) return NULL;
+    if( md9781_bulk_write(dh, buffer, 256) )
+        return NULL;
     dummy_write(dh);
     dummy_read(dh);
 
@@ -55,7 +57,8 @@ md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location,
     /* read the file */
     for(  i = 0; i < chunks; i++ ) {
         int length = 512;
-        if( md9781_bulk_read(dh, info_file + i *512 , 512) ) return NULL;
+        if( md9781_bulk_read(dh, info_file + i *512 , 512) )
+            return NULL;
         if( (i+1) * 512 > filesize )
             length = filesize % 512;
     }
@@ -63,6 +66,7 @@ md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location,
     info_file[filesize] = 0;
 
     #ifdef DEBUG
+
     printf("INFO-FILE:\n%s\n", info_file);
     #endif
 
@@ -73,8 +77,7 @@ md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location,
         if( entry != NULL ) {
             entry->next = (md9781_playlist_entry*)malloc(sizeof(md9781_playlist_entry) );
             entry = entry->next;
-        }
-        else {
+        } else {
             entry = (md9781_playlist_entry*)malloc(sizeof(md9781_playlist_entry) );
         }
 
@@ -90,6 +93,7 @@ md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location,
         entry->next = NULL;
         entry->name = strdup(info_file);
         entry->size = atoi( size_string );
+        entry->used = 0;
         if( playlist == NULL )
             playlist = entry;
 
@@ -109,13 +113,17 @@ int md9781_upload_playlist( usb_dev_handle* dh,
     len = 0;
 
     while( entry != NULL ) {
-        len += sprintf( info_file + len, "%s#%ld\r\n", entry->long_name, entry->size -16 );
+        if(entry->fnumber)
+            len += sprintf( info_file + len, "_name%03d%s#%ld\r\n", entry->fnumber, entry->long_name, entry->size -16 );
+        else
+            len += sprintf( info_file + len, "%s#%ld\r\n", entry->long_name, entry->size -16 );
         entry = entry->next;
     }
     info_file[len] = 0;
 
 
     #ifdef DEBUG
+
     printf("Writing info file:\n");
     printf("%s\n", info_file);
     #endif
@@ -143,17 +151,18 @@ int md9781_regenerate_playlist( usb_dev_handle* dh,char location ) {
     char* info_file = (char*)malloc(info_ssize);
     md9781_entry* playlist;
     md9781_entry* entry;
-    int len, i;
+    int len;
 
-    ignore_info_file();
     printf("regenerating playlist\n");
     playlist = md9781_file_list(dh, location);
     memset( info_file, 0, info_ssize );
     len = 0;
-    i = 0;
     entry = playlist;
     while( entry != NULL ) {
-        len += sprintf( info_file + len, "%s.%s#%ld\r\n", entry->short_name,entry->extension, entry->size -16 );
+        if(entry->fnumber)
+            len += sprintf( info_file + len, "_name%03d%s#%ld\r\n", entry->fnumber, entry->long_name, entry->size -16 );
+        else
+            len += sprintf( info_file + len, "%s#%ld\r\n", entry->long_name, entry->size -16 );
         entry = entry->next;
     }
     printf("%s\n", info_file );
@@ -174,6 +183,7 @@ int md9781_regenerate_playlist( usb_dev_handle* dh,char location ) {
 
     md9781_upload_file_from_buffer(dh, location, "tmpFname.txt", info_file, strlen(info_file) );
 
+    md9781_freemem_filelist(playlist);
     free(info_file);
     return 1;
 }
@@ -183,7 +193,7 @@ void md9781_freemem_playlist( md9781_playlist_entry* playlist ) {
     md9781_playlist_entry* old;
 
     if( playlist != NULL ) {
-        while( playlist != NULL ) {
+        while( entry != NULL ) {
             free(playlist->name);
             old = entry;
             entry = old->next;

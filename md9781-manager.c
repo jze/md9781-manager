@@ -19,7 +19,7 @@ void print_usage() {
     fprintf(stderr, "\nCOMMANDS:\n");
     fprintf(stderr, "-d <range-l> delete files numbered in <range-list>, e.g. 3-6,7,1 \n");
     fprintf(stderr, "-l           list files\n");
-    fprintf(stderr, "-r           regenerate playlist, if it got lost by some reason\n");
+    fprintf(stderr, "--format     format memory - erases all data (of course)\n");
     fprintf(stderr, "-p <file..>  put files to the player\n");
     fprintf(stderr, "-g <range-l> get the files named in <range-l> and save them in the current directory\n");
 }
@@ -62,7 +62,9 @@ int main( int argc, char **argv) {
             action = ACTION_UPLOAD;
             action_count++;
         } else if( !strcmp( argv[i], "-r" ) ) {
-            ignore_info_file();
+            /* ignoring the info_file is no more needed, because mixed up
+             * (=wrong) short/long-name combinations are made impossible now
+             */
             action = ACTION_REGENERATE_PLAYLIST;
             action_count++;
         } else if( !strcmp( argv[i], "--init" ) ) {
@@ -70,10 +72,10 @@ int main( int argc, char **argv) {
             action = ACTION_INITIALIZE_PLAYLIST;
             action_count++;
         } else if( !strcmp( argv[i], "--format" ) ) {
-   	    ignore_info_file();
-	    action = ACTION_FORMAT;
-	    action_count++;
-	} else {		// more args = files
+            ignore_info_file();
+            action = ACTION_FORMAT;
+            action_count++;
+        } else {		// more args = files
             sources[source_count++] = argv[i];
         }
     }
@@ -101,12 +103,13 @@ int main( int argc, char **argv) {
         playlist = md9781_file_list(md9781_handle, location);
         if( playlist == NULL ) {
             retries++;
-            md9781_close(md9781_handle);
+            /*md9781_close(md9781_handle); */
             printf("communication failed - waiting %d seconds\n", 5 * retries);
             sleep( 5* retries );
-            md9781_handle = md9781_open();
+            /* md9781_handle = md9781_open();
             if( md9781_handle == NULL )
-                abort();
+                abort(); */
+            while(!dummy_read(md9781_handle) );
         }
     }
 
@@ -137,10 +140,11 @@ int main( int argc, char **argv) {
     } else if( action == ACTION_INITIALIZE_PLAYLIST ) {
         md9781_init_playlist( md9781_handle, location );
     } else if( action == ACTION_FORMAT ) {
-        printf("Formating... (takes 10 seconds)\n");
+        printf("Formating... (takes some time - do not interrupt)\n");
         md9781_format( md9781_handle, location );
     }
 
+    md9781_freemem_filelist(playlist);
     md9781_close(md9781_handle);
     return 0;
 }

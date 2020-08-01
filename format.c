@@ -14,10 +14,8 @@ int md9781_format( usb_dev_handle* dh, char location) {
 
     md9781_bulk_write( dh, send_buffer, 256 );
     dummy_write( dh );
-         
-    sleep(10);
     
-    md9781_bulk_read(dh, send_buffer, 256);
+    md9781_bulk_read_with_timeout(dh, send_buffer, 256, USB_LONG_TIMEOUT);
     dummy_read( dh );
 
     md9781_init_playlist( dh, location );

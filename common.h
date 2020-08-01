@@ -22,6 +22,7 @@ extern struct usb_device *md9781_dev;
 typedef struct _md9781_playlist_entry {
     char* name;
     long  size;
+    int   used;
     struct _md9781_playlist_entry*  next;
 }
 md9781_playlist_entry;
@@ -46,12 +47,13 @@ int md9781_upload_playlist(usb_dev_handle* dh,
 
 md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location, const md9781_entry* playlist_file );
 
-
+void md9781_freemem_playlist( md9781_playlist_entry* playlist );
 
 typedef struct {
     usb_dev_handle* dh;
     char location;
     md9781_entry* playlist;
+    void (*callback) (int percent_done);
 }
 Passed_args;
 

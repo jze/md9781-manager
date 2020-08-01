@@ -7,7 +7,7 @@
 #define MD9781_EXTERN   'S'
 
 #define MD9781_NO_FILE_ON_PLAYER	(md9781_entry*)1
-#define MD9781_VERSION  "0.2.2"
+#define MD9781_VERSION  "0.2.3"
 
 extern struct usb_device *md9781_dev;
 
@@ -24,6 +24,7 @@ typedef struct _md9781_entry {
     int second;
     struct _md9781_entry* next;
     struct _md9781_entry* prev;
+    int fnumber;
 }
 md9781_entry;
 
@@ -33,6 +34,8 @@ int md9781_close( usb_dev_handle* dh );
 
 md9781_entry* md9781_file_list( usb_dev_handle* dh,
                                 char location );
+				
+void md9781_freemem_filelist( md9781_entry* files );
 
 int md9781_delete_file( usb_dev_handle* dh,
                         int file_number,
