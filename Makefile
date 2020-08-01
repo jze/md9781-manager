@@ -1,6 +1,6 @@
-CC=@CC@
-CFLAGS=@CFLAGS@
-LIBS=@USB_LIBS@
+CC=gcc
+CFLAGS=-g -O2 -Wall
+LIBS=-lusb
 
 OBJECTS =  md9781-manager.o common.o listfiles.o delete.o download.o upload.o playlist.o format.o
 

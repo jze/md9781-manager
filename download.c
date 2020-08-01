@@ -6,7 +6,7 @@ int md9781_download_file( usb_dev_handle* dh,
                           int nr,
                           char location,
                           md9781_entry* playlist,
-			  void (*callback)(int percent_done) ) {
+                          void (*callback)(int percent_done) ) {
     unsigned char send_buffer[256];
     int retval;
     FILE* file = fopen( filename, "w");
@@ -70,21 +70,59 @@ int md9781_download_file( usb_dev_handle* dh,
 
         memset( buffer, 0, 512);
         retval = md9781_bulk_read(dh, buffer, 512);
-	
+
         if( (i+1) * 512 > filesize )
             length = filesize % 512;
-	    
+
         fwrite( buffer, 1, length, file );
 
-	if( callback != NULL ) {
-	    int percent_done = (i / (double)chunks) * 100;
-	    if( percent_done != last_value ) {
-       	       callback( percent_done );
-	    }
-	    last_value = percent_done;
-	}
+        if( callback != NULL ) {
+            int percent_done = (i / (double)chunks) * 100;
+            if( percent_done != last_value ) {
+                callback( percent_done );
+            }
+            last_value = percent_done;
+        }
     }
+
     fclose(file);
     return 1;
 }
 
+static int fp_download(int nr, void *args ) {
+    Passed_args *arg = args;
+
+    /* get a file from the player (download) */
+    if( nr > 0 ) {
+        char *filename;
+        md9781_entry* tentry = md9781_entry_number( arg->playlist, nr );
+
+        // the info entries containing the long name information sometimes gets mixed
+        // up, so only use long_name if it begins like short_name
+        if(strncmp(tentry->long_name, tentry->short_name, 8) == 0)
+            filename = tentry->long_name;
+        else {
+            printf("info file is corrupt, hint: use -r option to rebuild it\n(warning: that truncates names to 8 chars!\n");
+            filename = tentry->short_name;
+        }
+
+        printf("Getting file #%d will call it '%s'...\n", nr, filename);
+        if( md9781_download_file( arg->dh , filename, nr, arg->location,
+                                  arg->playlist, NULL ) ) {
+            printf("File #%d saved.\n", nr);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
+int md9781_download_range(usb_dev_handle* dh, char *range, char location,
+                          md9781_entry* playlist, void (*callback)(int percent_done)  ) {
+    Passed_args passdown_args = {
+        dh, location, playlist
+    };
+
+    return exec_on_range(1, md9781_number_of_files(playlist) - 1,
+                         range, fp_download, &passdown_args);
+}

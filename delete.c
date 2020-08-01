@@ -17,7 +17,7 @@ int md9781_delete_file( usb_dev_handle* dh, int file_number, char location,
     if( playlist == NULL )
         playlist = md9781_file_list(dh, location );
 
-    if( file_number > md9781_number_of_files( playlist ) )
+    if( file_number >= md9781_number_of_files( playlist ) )
         return 0;
 
     memset(send_buffer, 0, 256);
@@ -37,8 +37,7 @@ int md9781_delete_file( usb_dev_handle* dh, int file_number, char location,
 
     /* unless it is the info file that has been deleted, a new info file
        will be written */
-    if( use_info_file && (file_number > MD9781_INFO_FILE)
-      ) {
+    if( use_info_file && (file_number > MD9781_INFO_FILE) ) {
 
         entry = md9781_entry_number( playlist, file_number );
 
@@ -49,5 +48,29 @@ int md9781_delete_file( usb_dev_handle* dh, int file_number, char location,
     }
 
     return 1;
+}
+
+
+static int fp_delete(int nr, void *x) {
+    Passed_args *arg = x;
+    if( nr > 0 ) {
+        printf("Deleting file #%d...\n", nr);
+        if( md9781_delete_file( arg->dh, nr, arg->location,
+                                arg->playlist) ) {
+            printf("File #%d  deleted.\n", nr);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int md9781_delete_range( usb_dev_handle* dh, char *range, char location,
+                         md9781_entry* playlist ) {
+    Passed_args passdown_args = {
+        dh, location, playlist
+    };
+
+    return exec_on_range(1, md9781_number_of_files(playlist) - 1,
+                         range, fp_delete, &passdown_args);
 }
 

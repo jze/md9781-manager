@@ -63,7 +63,7 @@ int md9781_upload_file( usb_dev_handle* dh,
                         const char* filename,
                         char location,
                         md9781_entry* playlist,
-			void (*callback)(int percent_done) ) {
+                        void (*callback)(int percent_done) ) {
     unsigned char send_buffer[256];
     long filesize;
     int filetime, filedate, read, chunks, i, last_value;
@@ -177,16 +177,14 @@ int md9781_upload_file( usb_dev_handle* dh,
         memset(buffer, 0, 512);
         read = fread( buffer, 1, 512, file );
         md9781_bulk_write(dh, buffer, 512);
-	if( callback != NULL ) {
-	    int percent_done = (i++ / (double)chunks) * 100;
-	    if( percent_done != last_value ) {
-       	       callback( percent_done );
-	    }
-	    last_value = percent_done;
-	}
-        /*  printf("%2.2f %% done\n", (i++ / (double)chunks) * 100 ); */
+        if( callback != NULL ) {
+            int percent_done = (i++ / (double)chunks) * 100;
+            if( percent_done != last_value ) {
+                callback( percent_done );
+            }
+            last_value = percent_done;
+        }
     }
-
     fclose(file);
 
     if( use_info_file ) {

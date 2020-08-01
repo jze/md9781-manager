@@ -8,6 +8,7 @@
 #define ACTION_SHOW_PLAYLIST	5
 #define ACTION_REGENERATE_PLAYLIST	6
 #define ACTION_INITIALIZE_PLAYLIST	7
+#define ACTION_FORMAT	8
 
 void print_usage() {
     fprintf(stderr, "md9781-manager version %s\n", MD9781_VERSION );
@@ -16,11 +17,11 @@ void print_usage() {
     fprintf(stderr, "-e           use smartmedia card\n");
     fprintf(stderr, "-i           ignore playlist (if you know what you do)\n");
     fprintf(stderr, "\nCOMMANDS:\n");
-    fprintf(stderr, "-d <nr>      delete file number nr\n");
+    fprintf(stderr, "-d <range-l> delete files numbered in <range-list>, e.g. 3-6,7,1 \n");
     fprintf(stderr, "-l           list files\n");
-    fprintf(stderr, "-p <file>    put a file to the player\n");
-    fprintf(stderr, "-g <nr>      get file number nr and save it in the current directory\n");
-    fprintf(stderr, "-r           regenerate playlist (if you know what you do)\n");
+    fprintf(stderr, "-r           regenerate playlist, if it got lost by some reason\n");
+    fprintf(stderr, "-p <file..>  put files to the player\n");
+    fprintf(stderr, "-g <range-l> get the files named in <range-l> and save them in the current directory\n");
 }
 
 void print_percent_done(int value ) {
@@ -33,36 +34,32 @@ void print_percent_done(int value ) {
 
 int main( int argc, char **argv) {
     int i,action_count=0, nr = 0,action = 0;
+    char *nr_string = NULL;
     md9781_entry* playlist = NULL;
     char location = 'M';
     usb_dev_handle* md9781_handle;
-    char* source = NULL;
     int max_retries = 5, retries = 0;
+    int source_count = 0;
+    char* sources[argc];	// vector of remaining args (e.g. files)
 
     for( i = 1; i < argc; i++ ) {
         if( !strcmp( argv[i], "-e" ) ) {
             location = 'S';
         } else if( !strcmp( argv[i], "-d" ) ) {
-            char* nr_string = argv[++i];
+            nr_string = argv[++i];
             action = ACTION_DELETE;
             action_count += 1;
-            nr = atoi( nr_string );
         } else if( !strcmp( argv[i], "-i" ) ) {
             ignore_info_file();
         } else if( !strcmp( argv[i], "-l" ) ) {
             action = ACTION_LIST;
             action_count++;
         } else if( !strcmp( argv[i], "-g" ) ) {
-            char* nr_string = argv[++i];
+            nr_string = argv[++i];
             action = ACTION_DOWNLOAD;
             action_count++;
-            nr = atoi( nr_string );
         } else if( !strcmp( argv[i], "-p" ) ) {
             action = ACTION_UPLOAD;
-            action_count++;
-            source = argv[++i];
-        } else if( !strcmp( argv[i], "-lpl" ) ) {
-            action = ACTION_SHOW_PLAYLIST;
             action_count++;
         } else if( !strcmp( argv[i], "-r" ) ) {
             ignore_info_file();
@@ -72,6 +69,12 @@ int main( int argc, char **argv) {
             ignore_info_file();
             action = ACTION_INITIALIZE_PLAYLIST;
             action_count++;
+        } else if( !strcmp( argv[i], "--format" ) ) {
+   	    ignore_info_file();
+	    action = ACTION_FORMAT;
+	    action_count++;
+	} else {		// more args = files
+            sources[source_count++] = argv[i];
         }
     }
 
@@ -112,70 +115,31 @@ int main( int argc, char **argv) {
     }
 
     if( action == ACTION_DELETE ) {
-        if( nr > 0 && nr < md9781_number_of_files( playlist ) ) {
-            printf("Deleting file #%d...\n", nr);
-            if( md9781_delete_file( md9781_handle , nr,  location,playlist ) )
-                printf("File #%d  deleted.\n", nr);
-        }
+        if( (nr = md9781_delete_range( md9781_handle, nr_string, location,playlist )) > 0 )
+            printf("%d files deleted.\n", nr);
     } else if( action == ACTION_LIST ) {
-        long sum_filesize = 0;
+        md9781_print_playlist(playlist);
 
-        i = 0;
-        /* list files on player */
-        printf("+-----+-------------------------------------+----------+------------+----------+\n");
-        printf("|   # | Filename                            | Size     | Date       | Time     |\n");
-        printf("+-----+-------------------------------------+----------+------------+----------+\n");
-
-        if( playlist == MD9781_NO_FILE_ON_PLAYER )  {
-            printf("| NO FILES ON PLAYER - please use '--init' to create a new info-file           |\n");
-            printf("+------------------------------------------------------------------------------+\n");
-            exit(0);
-        }
-
-        while( playlist != NULL ) {
-            printf("| %3d ", i++ );
-            printf("| %-35.35s ", playlist->long_name );
-            printf("| %8ld ", playlist->size );
-            printf("| %02d-%02d-%02d ", playlist->year, playlist->month,playlist->day );
-            printf("| %02d:%02d:%02d ", playlist->hour, playlist->minute, playlist->second );
-            printf("|\n");
-            sum_filesize += playlist->size;
-            playlist = playlist->next;
-        }
-
-        printf("+-----+-------------------------------------+----------+------------+----------+\n");
-        printf("| Used: %5.0f kB /", sum_filesize / 1024.0 );
-        printf(" Free: %5.0f kB (%2.0f %%)                                       |\n",
-               64.0 * 1024.0 - sum_filesize / 1024.0 ,
-               100.0 - sum_filesize / (64.0 * 1024.0 * 1024.0) * 100.0 );
-        printf("+------------------------------------------------------------------------------+\n");
     } else if( action == ACTION_DOWNLOAD) {
-        if( nr > 0 && nr < md9781_number_of_files( playlist ) ) {
-            char* filename = md9781_entry_number( playlist, nr )->long_name;
-            printf("Getting file #%d will call it '%s'...\n", nr, filename);
-            if( md9781_download_file( md9781_handle,
-                                      filename,
-                                      nr,
-                                      location,
-                                      playlist,
-                                      print_percent_done ) )
-                printf("\nFile #%d saved.\n", nr);
-        }
+        if( (nr = md9781_download_range( md9781_handle, nr_string, location,
+                                         playlist, print_percent_done )) > 0)
+            printf("%d files downloaded. \n", nr);
     } else if( action == ACTION_UPLOAD ) {
-        printf("Putting %s to the player\n", source);
-        if( md9781_upload_file( md9781_handle,
-                                source,
-                                location,
-                                playlist,
-                                print_percent_done) ) {
-            printf("\nFile has been uploaded.\n");
+        /* put all files on the player (upload) */
+        for( i = 0; i < source_count ; i++) {
+            printf("Putting %s to the player\n", sources[i]);
+            if( md9781_upload_file( md9781_handle, sources[i], location,playlist, print_percent_done) ) {
+                printf("File has been uploaded.\n");
+            }
         }
     } else if( action == ACTION_REGENERATE_PLAYLIST ) {
         md9781_regenerate_playlist( md9781_handle, location );
     } else if( action == ACTION_INITIALIZE_PLAYLIST ) {
         md9781_init_playlist( md9781_handle, location );
+    } else if( action == ACTION_FORMAT ) {
+        printf("Formating... (takes 10 seconds)\n");
+        md9781_format( md9781_handle, location );
     }
-
 
     md9781_close(md9781_handle);
     return 0;

@@ -81,9 +81,9 @@ int dummy_read( usb_dev_handle* dh ) {
     retval = usb_bulk_read(dh, 3, buffer, USB_BLOCK_SIZE, USB_SHORT_TIMEOUT);
     if (retval < 0) {
         error_message("dummy_read", "md9781_read failed");
-return MD9781_ERROR;
+        return MD9781_ERROR;
     }
-    dump_buffer( buffer, 256 );
+    dump_buffer( buffer, 256, "dummy_read" );
 
     return 0;
 }
@@ -100,16 +100,17 @@ int dummy_write( usb_dev_handle* dh ) {
         error_message("dummy_write", "md9781_write failed");
         return MD9781_ERROR;
     }
-    dump_buffer( buffer, 256 );
+    dump_buffer( buffer, 256, "dummy_write" );
 
     return 0;
 
 }
 
-void dump_buffer( const unsigned char* buffer, int size ) {
+void dump_buffer( const unsigned char* buffer, int size, const char* descr ) {
     #ifdef DEBUG
     int pos,i,temp, is_not_zero;
 
+    printf("dump called from: %s\n", descr);
     for( pos = 0; pos < size; pos++ ) {
         if( pos % 16 == 0 && pos + 16 < size ) {
             is_not_zero = 0;
@@ -157,12 +158,13 @@ void dump_buffer( const unsigned char* buffer, int size ) {
         }
         printf("|\n");
     }
+    printf("end dump (from %s)\n", descr);
     #endif
 }
 
 int md9781_bulk_write( usb_dev_handle* dh, char* buffer, int size ) {
     int retval;
-    dump_buffer(buffer, size);
+    dump_buffer(buffer, size, "md9781_bulk_write");
     retval = usb_bulk_write(dh, 2, buffer, size, USB_SHORT_TIMEOUT);
     if (retval < 0) {
         error_message("md9781_bulk_write", "md9781_send failed");
@@ -178,10 +180,104 @@ int md9781_bulk_read( usb_dev_handle* dh, char* buffer, int size ) {
         error_message("md9781_bulk_read", "md9781_read failed");
         return MD9781_ERROR;
     }
-    dump_buffer(buffer, size);
+    dump_buffer(buffer, size, "md9781_bulk_read");
     return MD9781_SUCCESS;
 }
 
 void ignore_info_file() {
-   use_info_file = 0;
+    use_info_file = 0;
+}
+
+
+
+/* return -1 on error, >= 0 (number of deleted items) on success
+ * fp point to a function that returns 1 on success and takes the
+ * (file) number to be deleted/downloaded/etc and an additional argument arg
+ */
+int exec_on_range(int low, int high, char *range, int (*fp)(int n, void *arg), void *arg) {
+    char accept[] = "0123456789-,";
+    int n_exec = 0;
+    int nmax = high - low +1;	// max number of entries in field
+    int field[nmax];
+    int i, j, last_field;
+    char *trange = range;
+    char *tp;
+
+    for(i = 0; i < nmax; i++)
+        field[i] = 0;
+
+    // check for invalid chars
+    if(strspn(range, accept) != strlen(range)) {
+        fprintf(stderr, "range string error: invalid char(s) used\n");
+        return -1;
+    }
+
+    // process the comma seperated ranges list - one field at a time
+    for(last_field = 0; !last_field; trange = tp + 1) {
+        char invalid_range_err[] = "range error: %d not in valid range\n";
+        char *first, *second;
+        int k;
+        if( (tp = index(trange, ',')) != NULL) {
+            *tp = 0;
+        } else
+            last_field = 1;
+        if(strlen(trange) == 0)
+            continue;
+
+        /* process the string [^,]<string>[,$]
+         * it may be an integer, a range #-#, or an incomplete range -#, #- 
+	 */
+        // printf("field: %s\n", trange);
+        second = index(trange, '-');
+        if(second == NULL) {	// no slash - one number
+            i = atoi(trange);
+            if(i >= low && i <= high)
+                field[i - low] = 1;
+            else {
+                fprintf(stderr, invalid_range_err, i);
+                return -1;
+            }
+        } else {			// a range x-y
+            first = trange;
+            *second = 0;
+            second++;
+
+            if(strlen(first) != 0) {
+                i = atoi(first);
+                if(i < low || i > high) {
+                    fprintf(stderr, invalid_range_err, i);
+                    return -1;
+                }
+            } else			// first is empty
+                i = low;
+
+            if(strlen(second) != 0) {
+                j = atoi(second);
+                if(j < low || j > high) {
+                    fprintf(stderr, invalid_range_err, j);
+                    return -1;
+                }
+            } else			// second is empty
+                j = high;
+
+            if(j < i ) {
+                fprintf(stderr, "range error: wrong order in <x>-<y>\n");
+                return -1;
+            }
+
+            for(k = i; k <= j; k++)
+                field[k - low] = 1;
+        }
+
+    }
+
+    for(i = high; i >= low; i--) {
+        if(field[i - low]) {
+
+            if(fp(i, arg) == 1)
+                n_exec++;
+        }
+    }
+
+    return n_exec;
 }

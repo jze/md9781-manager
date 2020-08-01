@@ -4,6 +4,8 @@
 #include <string.h>
 #include <malloc.h>
 
+const int info_ssize = 8192;
+
 md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location,
         const md9781_entry* playlist_file ) {
     unsigned char buffer[256];
@@ -66,8 +68,7 @@ md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location,
 
     while( index(info_file, 0xd ) != NULL ) {
         int name_length;
-        unsigned char* size_string;
-
+        unsigned char* size_string = NULL;
 
         if( entry != NULL ) {
             entry->next = (md9781_playlist_entry*)malloc(sizeof(md9781_playlist_entry) );
@@ -79,7 +80,12 @@ md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location,
 
         name_length = index(info_file, 0xd ) - (char*)info_file;
         info_file[name_length] = 0;
-        size_string =  index( info_file, '#' ) +1 ;
+
+        if(index(info_file, '#'))
+            size_string =  index( info_file, '#' ) +1 ;
+        else
+            printf("format error in info file: no size parameter\n");
+
         size_string[-1] = 0;
         entry->next = NULL;
         entry->name = strdup(info_file);
@@ -97,15 +103,17 @@ md9781_playlist_entry* md9781_play_list( usb_dev_handle* dh, char location,
 int md9781_upload_playlist( usb_dev_handle* dh,
                             char location,
                             md9781_entry* playlist ) {
-    char* info_file = (char*)malloc(8192);
+    char* info_file = (char*)malloc(info_ssize);
     md9781_entry* entry = playlist;
     int len;
-
     len = 0;
+
     while( entry != NULL ) {
         len += sprintf( info_file + len, "%s#%ld\r\n", entry->long_name, entry->size -16 );
         entry = entry->next;
     }
+    info_file[len] = 0;
+
 
     #ifdef DEBUG
     printf("Writing info file:\n");
@@ -116,13 +124,13 @@ int md9781_upload_playlist( usb_dev_handle* dh,
     md9781_delete_file( dh, MD9781_INFO_FILE, location,playlist);
 
     md9781_upload_file_from_buffer(dh, location, "tmpFname.txt", info_file, strlen(info_file) );
-    
+
     free(info_file);
     return 1;
 }
 
 int md9781_init_playlist( usb_dev_handle* dh,
-                            char location ) {
+                          char location ) {
     char* info_file = (char*)malloc(256);
     memset( info_file, 0, 256 );
     memcpy( info_file, "tmpFname.txt#17\r\n", 17 );
@@ -132,7 +140,7 @@ int md9781_init_playlist( usb_dev_handle* dh,
 }
 
 int md9781_regenerate_playlist( usb_dev_handle* dh,char location ) {
-    char* info_file = (char*)malloc(8192);
+    char* info_file = (char*)malloc(info_ssize);
     md9781_entry* playlist;
     md9781_entry* entry;
     int len, i;
@@ -140,7 +148,7 @@ int md9781_regenerate_playlist( usb_dev_handle* dh,char location ) {
     ignore_info_file();
     printf("regenerating playlist\n");
     playlist = md9781_file_list(dh, location);
-    memset( info_file, 0, 8192 );
+    memset( info_file, 0, info_ssize );
     len = 0;
     i = 0;
     entry = playlist;

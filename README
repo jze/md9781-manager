@@ -38,11 +38,12 @@ INSTALLATION
 
   If everything works installing the program should be as easy as:
 
-  tar xvfz md9781manager-0.1.tar.gz
-  cd md9781manager-0.1/
+  tar xvfz md9781manager-0.2.2.tar.gz
+  cd md9781manager-0.2.2/
+  ./configure
   make
-  make install   # (optional - this copies the md9781-manager binary to /usr/
-  local/bin/ )
+  make install   # (optional - this copies the md9781-manager binary to 
+  /usr/local/bin/ )
 
   The access rights for the usb device file (/prc/bus/usb/001/xxx) are a little
   bit tricky. Usually only root is allowed to write to the file. There are
@@ -89,6 +90,15 @@ USAGE
   To get the first file from the player: md9781-manager -g 1 . This will save
   the file in the current directory. It will be called like it was on the
   player.
+  
+  Dietrich Rothe (dietrich@d-rothe.de) send me a patch that make the usage
+  of the program easier:
+  
+   1. with "-p" you can upload multiple files 
+   2. "-d" and "-g" accept a range-list with multiple numbers: for example
+   
+   -d -3,4,20-40,49- deletes files 1,2,3, file #4, 20 to 40, and all files 
+                     having a number greater than (including) 49 
   
   The newest version of this text can be found at:
     http://zedlitz.de/md9781.html
